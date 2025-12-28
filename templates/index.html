@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MBTA Line Recovery</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body { font-family: Arial; padding: 30px; }
+    svg { margin-top: 20px; background-color: #f9f9f9; }
+    .tooltip {
+      position: absolute;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      border-radius: 4px;
+      pointer-events: none;
+      font-size: 12px;
+    }
+    .line { fill: none; stroke-width: 3px; }
+    .point { stroke: #fff; stroke-width: 1.5px; }
+    .axis-label { font-size: 14px; font-weight: bold; }
+    .checkbox-container { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>MBTA Line Recovery</h1>
+
+  <div class="checkbox-container" id="line-checkboxes"></div>
+  <svg width="900" height="500"></svg>
+  <div class="tooltip" style="opacity:0"></div>
+
+  <script>
+  fetch('/line_recovery')
+    .then(res => res.json())
+    .then(data => {
+      const svg = d3.select("svg");
+      const width = +svg.attr("width");
+      const height = +svg.attr("height");
+      const margin = {top: 50, right: 60, bottom: 60, left: 70};
+      const tooltip = d3.select(".tooltip");
+
+      const x = d3.scaleLinear()
+        .domain(d3.extent(data, d => d.year))
+        .range([margin.left, width - margin.right]);
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.recovery_pct) * 1.1])
+        .range([height - margin.bottom, margin.top]);
+
+      // MBTA line color mapping
+      const lineColors = {
+        'BLUE LINE': '#0E5CAD',
+        'GREEN LINE': '#00843D',
+        'MATTAPAN LINE': '#8B4513',
+        'ORANGE LINE': '#ED6A0C',
+        'RED LINE': '#DA291C',
+        'SILVER LINE': '#A7A9AC'
+      };
+
+      const lines = d3.group(data, d => d.line);
+      const lineGen = d3.line()
+        .x(d => x(d.year))
+        .y(d => y(d.recovery_pct))
+        .curve(d3.curveMonotoneX);
+
+      // Create checkboxes for filtering
+      const checkboxContainer = d3.select("#line-checkboxes");
+      Array.from(lines.keys()).forEach(lineName => {
+        const id = `cb-${lineName.replace(/\s/g,"")}`;
+        checkboxContainer.append("input")
+          .attr("type", "checkbox")
+          .attr("id", id)
+          .attr("checked", true)
+          .on("change", updateChart);
+
+        checkboxContainer.append("label")
+          .attr("for", id)
+          .text(lineName);
+
+        checkboxContainer.append("span").text(" ");
+      });
+
+      function updateChart() {
+        svg.selectAll("*").remove(); // clear previous lines and points
+
+        const selectedLines = Array.from(document.querySelectorAll("#line-checkboxes input:checked"))
+                                   .map(cb => cb.nextSibling.textContent);
+
+        for (const [lineName, values] of lines) {
+          if (!selectedLines.includes(lineName)) continue;
+
+          svg.append("path")
+            .datum(values)
+            .attr("class", "line")
+            .attr("stroke", lineColors[lineName] || "#000")
+            .attr("d", lineGen);
+
+          svg.selectAll(`.point-${lineName}`)
+            .data(values)
+            .enter()
+            .append("circle")
+            .attr("class", "point")
+            .attr("cx", d => x(d.year))
+            .attr("cy", d => y(d.recovery_pct))
+            .attr("r", 4)
+            .attr("fill", lineColors[lineName] || "#000")
+            .on("mouseover", (event, d) => {
+              tooltip.transition().duration(200).style("opacity", 0.9);
+              tooltip.html(`<strong>${d.line}</strong><br>Year: ${d.year}<br>Recovery: ${d.recovery_pct}%`)
+                     .style("left", (event.pageX + 10) + "px")
+                     .style("top", (event.pageY - 30) + "px");
+            })
+            .on("mouseout", () => tooltip.transition().duration(200).style("opacity", 0));
+        }
+
+        // axes
+        svg.append("g")
+          .attr("transform", `translate(0,${height - margin.bottom})`)
+          .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format("d")))
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("x", (width)/2)
+          .attr("y", 40)
+          .attr("fill", "#000")
+          .text("Year");
+
+        svg.append("g")
+          .attr("transform", `translate(${margin.left},0)`)
+          .call(d3.axisLeft(y))
+          .append("text")
+          .attr("class", "axis-label")
+          .attr("transform", "rotate(-90)")
+          .attr("x", -height/2)
+          .attr("y", -50)
+          .attr("fill", "#000")
+          .attr("text-anchor", "middle")
+          .text("Recovery Percentage (%)");
+      }
+
+      updateChart(); // initial render
+    })
+    .catch(err => console.error("Error fetching data:", err));
+</script>
+</body>
+</html>
