@@ -11,7 +11,7 @@ def home():
 def line_recovery():
     conn = snowflake.connector.connect(
         user='joshuam0y',
-        password='HeyBabyWontYouLookMyWa7?',
+        password='LOL',
         account="rj84036.ca-central-1.aws",
         warehouse='COMPUTE_WH',
         database='MBTA',
